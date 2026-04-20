@@ -20,7 +20,7 @@ export default function ModelDetail({ tool, providers, onBack, onDeleted }: Prop
   const [saved, setSaved] = useState(false);
 
   const update = (patch: Partial<AITool>) => setDraft(d => ({ ...d, ...patch }));
-  const updateParams = (patch: Record<string, number | undefined>) =>
+  const updateParams = (patch: Record<string, number | string | undefined>) =>
     setDraft(d => ({ ...d, model_params: { ...d.model_params, ...patch } }));
 
   const save = async () => {
@@ -38,6 +38,7 @@ export default function ModelDetail({ tool, providers, onBack, onDeleted }: Prop
         system_prompt: draft.system_prompt,
         icon_url: draft.icon_url,
         tags: draft.tags,
+        model_kind: draft.model_kind,
         model_params: draft.model_params,
       })
       .eq('id', tool.id);
@@ -210,6 +211,18 @@ export default function ModelDetail({ tool, providers, onBack, onDeleted }: Prop
             />
           </div>
           <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">Model Kind</label>
+            <select
+              value={draft.model_kind || 'chat'}
+              onChange={e => update({ model_kind: e.target.value as AITool['model_kind'] })}
+              className="w-full bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2"
+            >
+              <option value="chat">Chat</option>
+              <option value="image">Image generation</option>
+              <option value="video">Video generation</option>
+            </select>
+          </div>
+          <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">Status</label>
             <label className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 cursor-pointer">
               <input
@@ -224,19 +237,68 @@ export default function ModelDetail({ tool, providers, onBack, onDeleted }: Prop
         </div>
       </div>
 
-      <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white">Model Params</h3>
-          <p className="text-xs text-slate-500">Leave blank to use model defaults.</p>
+      {draft.model_kind === 'image' ? (
+        <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Image Params</h3>
+            <p className="text-xs text-slate-500">Default settings for this image model.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1 uppercase tracking-wide">Default Size</label>
+              <select
+                value={draft.model_params.size || '1024x1024'}
+                onChange={e => updateParams({ size: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2"
+              >
+                <option value="1024x1024">1024x1024</option>
+                <option value="1792x1024">1792x1024</option>
+                <option value="1024x1792">1024x1792</option>
+                <option value="1536x1024">1536x1024</option>
+                <option value="1024x1536">1024x1536</option>
+                <option value="2048x2048">2048x2048</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1 uppercase tracking-wide">Default Quality</label>
+              <select
+                value={draft.model_params.quality || 'standard'}
+                onChange={e => updateParams({ quality: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2"
+              >
+                <option value="standard">Standard</option>
+                <option value="hd">HD</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1 uppercase tracking-wide">Output Format</label>
+              <select
+                value={draft.model_params.output_format || 'png'}
+                onChange={e => updateParams({ output_format: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2"
+              >
+                <option value="png">PNG</option>
+                <option value="jpeg">JPEG</option>
+                <option value="webp">WebP</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <NumField label="Temperature" step="0.1" value={draft.model_params.temperature} onChange={v => updateParams({ temperature: v })} />
-          <NumField label="Max Tokens" step="1" value={draft.model_params.max_tokens} onChange={v => updateParams({ max_tokens: v })} />
-          <NumField label="Top P" step="0.05" value={draft.model_params.top_p} onChange={v => updateParams({ top_p: v })} />
-          <NumField label="Freq Penalty" step="0.1" value={draft.model_params.frequency_penalty} onChange={v => updateParams({ frequency_penalty: v })} />
-          <NumField label="Pres Penalty" step="0.1" value={draft.model_params.presence_penalty} onChange={v => updateParams({ presence_penalty: v })} />
+      ) : (
+        <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Model Params</h3>
+            <p className="text-xs text-slate-500">Leave blank to use model defaults.</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <NumField label="Temperature" step="0.1" value={draft.model_params.temperature} onChange={v => updateParams({ temperature: v })} />
+            <NumField label="Max Tokens" step="1" value={draft.model_params.max_tokens} onChange={v => updateParams({ max_tokens: v })} />
+            <NumField label="Top P" step="0.05" value={draft.model_params.top_p} onChange={v => updateParams({ top_p: v })} />
+            <NumField label="Freq Penalty" step="0.1" value={draft.model_params.frequency_penalty} onChange={v => updateParams({ frequency_penalty: v })} />
+            <NumField label="Pres Penalty" step="0.1" value={draft.model_params.presence_penalty} onChange={v => updateParams({ presence_penalty: v })} />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5">
         <h3 className="text-sm font-semibold text-white mb-1">System Prompt</h3>

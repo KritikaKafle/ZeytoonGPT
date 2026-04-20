@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Sparkles, Menu, ChevronDown, Bot, User as UserIcon, AlertCircle, Paperclip, X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { supabase, Conversation, Message, AITool, Attachment } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { sendChatMessage } from '../lib/chatApi';
+import { sendChatMessage, generateImage } from '../lib/chatApi';
 
 type Props = {
   conversation: Conversation | null;
@@ -25,6 +25,8 @@ export default function ChatView({ conversation, tools, onOpenSidebar, onConvers
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [imgSize, setImgSize] = useState<string>('1024x1024');
+  const [imgQuality, setImgQuality] = useState<string>('standard');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -130,18 +132,40 @@ export default function ChatView({ conversation, tools, onOpenSidebar, onConvers
       .maybeSingle();
     if (userMsg) setMessages(prev => [...prev, { ...userMsg, attachments: userMsg.attachments || [] }]);
 
-    const history = [...messages, userMsg].filter(Boolean).map(m => ({
-      role: m!.role,
-      content: m!.content,
-      attachments: (m!.attachments || []) as Attachment[],
-    }));
+    const isImage = selectedTool?.model_kind === 'image';
 
-    const result = await sendChatMessage(selectedToolId, history);
+    let assistantContent = '';
+    let assistantAttachments: Attachment[] = [];
+    let tokensUsed = 0;
 
-    if (result.error) {
-      setError(result.error);
-      setSending(false);
-      return;
+    if (isImage) {
+      const imgRes = await generateImage(selectedToolId, userContent, {
+        size: imgSize,
+        quality: imgQuality,
+        output_format: 'png',
+      });
+      if (imgRes.error || !imgRes.attachment) {
+        setError(imgRes.error || 'Image generation failed');
+        setSending(false);
+        return;
+      }
+      assistantContent = `Generated image for: "${userContent}"`;
+      assistantAttachments = [imgRes.attachment];
+      tokensUsed = imgRes.tokensUsed;
+    } else {
+      const history = [...messages, userMsg].filter(Boolean).map(m => ({
+        role: m!.role,
+        content: m!.content,
+        attachments: (m!.attachments || []) as Attachment[],
+      }));
+      const result = await sendChatMessage(selectedToolId, history);
+      if (result.error) {
+        setError(result.error);
+        setSending(false);
+        return;
+      }
+      assistantContent = result.message;
+      tokensUsed = result.tokensUsed;
     }
 
     const { data: aiMsg } = await supabase
@@ -149,8 +173,9 @@ export default function ChatView({ conversation, tools, onOpenSidebar, onConvers
       .insert({
         conversation_id: activeConv.id,
         role: 'assistant',
-        content: result.message,
-        tokens_used: result.tokensUsed,
+        content: assistantContent,
+        tokens_used: tokensUsed,
+        attachments: assistantAttachments,
       })
       .select()
       .maybeSingle();
@@ -264,6 +289,40 @@ export default function ChatView({ conversation, tools, onOpenSidebar, onConvers
               <span>{error}</span>
             </div>
           )}
+          {selectedTool?.model_kind === 'image' && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-400">Size</span>
+              {['1024x1024', '1792x1024', '1024x1792'].map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setImgSize(s)}
+                  className={`px-2.5 py-1 rounded-full border transition ${
+                    imgSize === s
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
+                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+              <span className="text-slate-400 ml-2">Quality</span>
+              {['standard', 'hd'].map(q => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setImgQuality(q)}
+                  className={`px-2.5 py-1 rounded-full border transition ${
+                    imgQuality === q
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
+                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="relative bg-slate-800 border border-slate-700 rounded-2xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition">
             {pendingAttachments.length > 0 && (
               <div className="flex flex-wrap gap-2 px-3 pt-3">
@@ -276,7 +335,11 @@ export default function ChatView({ conversation, tools, onOpenSidebar, onConvers
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Message ${selectedTool?.display_name || 'AI'}...`}
+              placeholder={
+                selectedTool?.model_kind === 'image'
+                  ? `Describe the image you want ${selectedTool.display_name} to create...`
+                  : `Message ${selectedTool?.display_name || 'AI'}...`
+              }
               rows={1}
               className="w-full bg-transparent text-white placeholder-slate-500 resize-none px-4 py-3.5 pl-12 pr-14 focus:outline-none max-h-48"
               style={{ minHeight: '52px' }}

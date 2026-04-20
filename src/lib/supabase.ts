@@ -46,12 +46,16 @@ export type AITool = {
   system_prompt: string;
   icon_url: string;
   tags: string[];
+  model_kind: 'chat' | 'image' | 'video';
   model_params: {
     temperature?: number;
     max_tokens?: number;
     top_p?: number;
     frequency_penalty?: number;
     presence_penalty?: number;
+    size?: string;
+    quality?: string;
+    output_format?: 'png' | 'jpeg' | 'webp';
   };
 };
 
